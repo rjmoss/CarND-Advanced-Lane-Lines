@@ -1,7 +1,7 @@
 
 # coding: utf-8
 
-# In[1]:
+# In[ ]:
 
 
 import cv2
@@ -15,7 +15,13 @@ import pickle
 from IPython.core import debugger
 
 
-# In[15]:
+# In[1]:
+
+
+FRESH = False
+
+
+# In[2]:
 
 
 # To save as normal python script (easier to git diff)
@@ -33,70 +39,66 @@ test_images = [cv2.imread(file) for file in test_image_paths]
 # pipeline(test_images[0], calibration, M)
 
 
-# In[4]:
-
-
-# prepare object points, like (0,0,0), (1,0,0), (2,0,0) ....,(9,6,0)
-cal_x = 9
-cal_y = 6
-objp = np.zeros((cal_x*cal_y,3), np.float32)
-objp[:,:2] = np.mgrid[0:cal_x, 0:cal_y].T.reshape(-1,2)
-
-
-# In[5]:
-
-
-# Prepare the object points and image points for the calibration
-calibration_image_paths = glob.glob('camera_cal/calibration*.jpg')
-calibration_images = [cv2.imread(file) for file in calibration_image_paths]
-calibration_images_gray = [cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) for img in calibration_images]
-
-obj_points = []
-img_points = []
-for gray in calibration_images_gray:
-    ret, corners = cv2.findChessboardCorners(gray, (cal_x,cal_y), None)
-    if ret:
-        obj_points.append(objp)
-        img_points.append(corners)
-
-
 # In[6]:
 
 
-img_size = (calibration_images_gray[0].shape[1],
-            calibration_images_gray[0].shape[0])
+if FRESH:
+    # prepare object points, like (0,0,0), (1,0,0), (2,0,0) ....,(9,6,0)
+    cal_x = 9
+    cal_y = 6
+    objp = np.zeros((cal_x*cal_y,3), np.float32)
+    objp[:,:2] = np.mgrid[0:cal_x, 0:cal_y].T.reshape(-1,2)
 
-# Calibrate the camera (and save pickle)
-ret, mtx, dist, rvecs, tvecs = cv2.calibrateCamera(obj_points, img_points, img_size, None, None)
-calibration = {
-    "ret": ret,
-    "mtx": mtx,
-    "dist": dist,
-    "rvecs": rvecs,
-    "tvecs": tvecs
-}
-pickle.dump(calibration, open("camera_cal/pickled_calibration.p", "wb"))
+    # Prepare the object points and image points for the calibration
+    calibration_image_paths = glob.glob('camera_cal/calibration*.jpg')
+    calibration_images = [cv2.imread(file) for file in calibration_image_paths]
+    calibration_images_gray = [cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) for img in calibration_images]
+
+    obj_points = []
+    img_points = []
+    for gray in calibration_images_gray:
+        ret, corners = cv2.findChessboardCorners(gray, (cal_x,cal_y), None)
+        if ret:
+            obj_points.append(objp)
+            img_points.append(corners)
+
+    img_size = (calibration_images_gray[0].shape[1],
+                calibration_images_gray[0].shape[0])
+
+    # Calibrate the camera (and save pickle)
+    ret, mtx, dist, rvecs, tvecs = cv2.calibrateCamera(obj_points, img_points, img_size, None, None)
+    calibration = {
+        "ret": ret,
+        "mtx": mtx,
+        "dist": dist,
+        "rvecs": rvecs,
+        "tvecs": tvecs
+    }
+    pickle.dump(calibration, open("camera_cal/pickled_calibration.p", "wb"))
+else:
+    calibration = pickle.load(open("camera_cal/pickled_calibration.p", "wb"))
 
 
 # In[7]:
 
 
-undistorted_images = [cv2.undistort(img, mtx, dist, None, mtx) for img in calibration_images_gray]
+if FRESH:
+    undistorted_images = [cv2.undistort(img, mtx, dist, None, mtx) for img in calibration_images_gray]
 
-# Visualize undistortion
-f, axes = plt.subplots(len(calibration_images), 2, figsize=(10,60), sharey=True, sharex=True)
+    # Visualize undistortion
+    f, axes = plt.subplots(len(calibration_images), 2, figsize=(10,60), sharey=True, sharex=True)
 
-for i, (org, undist) in enumerate(zip(calibration_images_gray, undistorted_images)):
-    axes.flat[2*i].imshow(calibration_images_gray[i], cmap='gray')
-    axes.flat[2*i + 1].imshow(undistorted_images[i], cmap='gray')
+    for i, (org, undist) in enumerate(zip(calibration_images_gray, undistorted_images)):
+        axes.flat[2*i].imshow(calibration_images_gray[i], cmap='gray')
+        axes.flat[2*i + 1].imshow(undistorted_images[i], cmap='gray')
 
-    if i == 0:
-        axes.flat[i].set_title('Original Images')
-        axes.flat[i+1].set_title('Undistorted Images')
-        cv2.imwrite('output_images/original_chessboard.jpg', org)
-        cv2.imwrite('output_images/undistorted_chessboard.jpg', undist)
+        if i == 0:
+            axes.flat[i].set_title('Original Images')
+            axes.flat[i+1].set_title('Undistorted Images')
+            cv2.imwrite('output_images/original_chessboard.jpg', org)
+            cv2.imwrite('output_images/undistorted_chessboard.jpg', undist)
 
-plt.tight_layout()
+    plt.tight_layout()
 
 
 # In[8]:
@@ -225,7 +227,126 @@ plt.gca().add_patch(Polygon(destination_points, linewidth=1,edgecolor='r',faceco
 #     return cv2.warpPerspective(img, M, img_size, flags=cv2.INTER_LINEAR)
 
 
-# In[11]:
+# In[46]:
+
+
+# Windows (2 methods)
+MIN_PIXELS = 50
+
+n_windows = 9
+W_WIDTH = 50
+w_height = 90
+MARGIN = 100
+
+# Function which finds indices of lane (will call twice e.g. for left/right)
+def find_lane_indices_from_windows(binary_img, start_x, nonzero_x, nonzero_y):
+    img_shape = binary_img.shape
+    w_centre = start_x
+    pixels = []
+    window_history = []
+
+    for n in range(n_windows):
+        w_bottom = img_shape[0] - n*w_height
+        w_top = w_bottom - w_height
+
+        # Identify non-zero pixels within the window
+        nonzero_pixels = (
+            (nonzero_y >= w_top) & 
+            (nonzero_y < w_bottom) & 
+            (nonzero_x >= w_centre - W_WIDTH / 2) & 
+            (nonzero_x < w_centre + W_WIDTH / 2)
+        ).nonzero()[0]
+        
+        pixels.append(nonzero_pixels)
+        
+        # If sufficient non-zero pixels are found then renceter next window
+        # on the mean position of the non-zero pixels
+        if len(nonzero_pixels)>= MIN_PIXELS:
+            w_centre = np.int(np.mean(nonzero_x[nonzero_pixels]))
+    
+    return np.concatenate(pixels)
+
+
+def find_lane_indices_from_fit(fit, nonzero_x, nonzero_y):
+    # Identify the x and y positions of all nonzero pixels in the image
+    line = fit[0]*(nonzeroy**2) + fit[1]*nonzeroy + fit[2]
+    lane_inds = ((nonzero_x > line - margin) & 
+                 (nonzero_x > line + margin))
+    return lane_inds
+
+
+def get_start_points_using_histogram(binary_img):
+    img_height, img_width = binary_img.shape
+
+    histogram = np.sum(binary_img[int(img_height/2):, :], axis=0)
+    plt.plot(histogram)
+    plt.figure()
+    
+    # Get the start points for the windows (e.g. bottom of lane lines)
+    midpoint = int(img_width / 2)
+    left_start = np.argmax(histogram[:midpoint])
+    right_start = midpoint + np.argmax(histogram[midpoint:])
+    return left_start, right_start
+
+
+def get_line_fits(binary_img, prev_left_fit=None, prev_right_fit=None):
+    """
+    If we have the previous line information (e.g. from previous frame in video):
+        Use this to find the pixels which make up the new line.
+    Else:
+        Use the histogram to find the base of the lines and the window method
+        to find the rest of the line
+
+    Return the best fit through the pixels
+    """
+    # Identify the x and y positions of all nonzero pixels in the image
+    nonzero = binary_img.nonzero()
+    nonzero_y = np.array(nonzero[0])
+    nonzero_x = np.array(nonzero[1])
+
+    if prev_left_fit is None or prev_right_fit is None:
+        left_start, right_start = get_start_points_using_histogram(binary_img)
+        print(left_start, right_start)
+    
+    if prev_left_fit is None:
+        left_lane_inds = find_lane_indices_from_windows(binary_img, left_start, nonzero_x, nonzero_y)
+    else:
+        left_lane_inds = find_lane_indices_from_fit(prev_left_fit, nonzero_x, nonzero_y)
+
+    if prev_right_fit is None:
+        right_lane_inds = find_lane_indices_from_windows(binary_img, right_start, nonzero_x, nonzero_y)
+    else:
+        right_lane_inds = find_lane_indices_from_fit(prev_right_fit, nonzero_x, nonzero_y)
+
+    # Extract left and right line pixel positions
+    leftx = nonzero_x[left_lane_inds]
+    lefty = nonzero_y[left_lane_inds]
+    rightx = nonzero_x[right_lane_inds]
+    righty = nonzero_y[right_lane_inds]
+
+    # Fit a second order polynomial to each
+    left_fit = np.polyfit(lefty, leftx, 2)
+    right_fit = np.polyfit(righty, rightx, 2)
+    
+    if True:
+        # Generate x and y values for plotting
+        ploty = np.linspace(0, binary_img.shape[0]-1, binary_img.shape[0] )
+        left_fitx = left_fit[0]*ploty**2 + left_fit[1]*ploty + left_fit[2]
+        right_fitx = right_fit[0]*ploty**2 + right_fit[1]*ploty + right_fit[2]
+    
+        out_img = np.dstack((binary_img, binary_img, binary_img))*255
+        out_img[nonzero_y[left_lane_inds], nonzero_x[left_lane_inds]] = [255, 0, 0]
+        out_img[nonzero_y[right_lane_inds], nonzero_x[right_lane_inds]] = [0, 0, 255]
+        plt.imshow(out_img)
+        plt.plot(left_fitx, ploty, color='yellow')
+        plt.plot(right_fitx, ploty, color='yellow')
+        plt.xlim(0, 1280)
+        plt.ylim(720, 0)
+
+    return left_fit, right_fit
+
+
+# In[12]:
 
 
 # 1. Compute the camera calibration matrix and distortion coefficients given a set of chessboard images.
@@ -251,7 +372,7 @@ def pipeline(img, calibration, M):
     
 
 
-# In[12]:
+# In[13]:
 
 
 # Takes the result of the pipeline and visualises it
@@ -259,7 +380,7 @@ def visualisation():
     pass
 
 
-# In[13]:
+# In[14]:
 
 
 test = test_images[0]
@@ -283,10 +404,16 @@ plt.imshow(warped_binary, cmap='gray')
 plt.title('Warped Threshold')
 
 
-# In[14]:
+# In[15]:
 
 
 # Useful to remember
 # threshold_binary_2 = threshold_binary[:,:,None]
 # threshold_3 = np.dstack((np.zeros_like(threshold_binary), np.zeros_like(threshold_binary), threshold_binary)) * 255
+
+
+# In[47]:
+
+
+left_fit, right_fit = get_line_fits(warped_binary)
 
