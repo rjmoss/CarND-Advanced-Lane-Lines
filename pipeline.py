@@ -1,7 +1,7 @@
 
 # coding: utf-8
 
-# In[ ]:
+# In[1]:
 
 
 import cv2
@@ -14,11 +14,15 @@ import pickle
 
 from IPython.core import debugger
 
+
+# In[15]:
+
+
 # To save as normal python script (easier to git diff)
 get_ipython().system('jupyter nbconvert --to script pipeline.ipynb')
 
 
-# In[ ]:
+# In[3]:
 
 
 # TESTING
@@ -29,7 +33,7 @@ test_images = [cv2.imread(file) for file in test_image_paths]
 # pipeline(test_images[0], calibration, M)
 
 
-# In[ ]:
+# In[4]:
 
 
 # prepare object points, like (0,0,0), (1,0,0), (2,0,0) ....,(9,6,0)
@@ -39,7 +43,7 @@ objp = np.zeros((cal_x*cal_y,3), np.float32)
 objp[:,:2] = np.mgrid[0:cal_x, 0:cal_y].T.reshape(-1,2)
 
 
-# In[ ]:
+# In[5]:
 
 
 # Prepare the object points and image points for the calibration
@@ -56,7 +60,7 @@ for gray in calibration_images_gray:
         img_points.append(corners)
 
 
-# In[ ]:
+# In[6]:
 
 
 img_size = (calibration_images_gray[0].shape[1],
@@ -74,7 +78,7 @@ calibration = {
 pickle.dump(calibration, open("camera_cal/pickled_calibration.p", "wb"))
 
 
-# In[ ]:
+# In[7]:
 
 
 undistorted_images = [cv2.undistort(img, mtx, dist, None, mtx) for img in calibration_images_gray]
@@ -95,7 +99,7 @@ for i, (org, undist) in enumerate(zip(calibration_images_gray, undistorted_image
 plt.tight_layout()
 
 
-# In[ ]:
+# In[8]:
 
 
 # Thresholding functions
@@ -140,7 +144,7 @@ def hls_select(img, thresh=(0, 255)):
     return binary_output
 
 
-# In[ ]:
+# In[9]:
 
 
 # Constants for actual use of above functions
@@ -172,7 +176,7 @@ def threshold_combination(img, plot=False):
     return combined
 
 
-# In[ ]:
+# In[10]:
 
 
 straight = cv2.imread('test_images/straight_lines1.jpg')
@@ -189,10 +193,14 @@ src_points = np.float32([
 destination_points = np.float32([
 #     [266, -1000], # top-left
 #     [1054, -1000], # top-right
-    [254, 0], # top-left
-    [1054, 0], # top-right
-    [1054, 678], # bottom-right
-    [254, 678] # bottom-left
+#     [254, 0], # top-left
+#     [1054, 0], # top-right
+#     [1054, 678], # bottom-right
+#     [254, 678] # bottom-left
+    [350, 0], # top-left
+    [950, 0], # top-right
+    [950, 678], # bottom-right
+    [350, 678] # bottom-left
 ])
 
 plt.imshow(straight)
@@ -217,7 +225,7 @@ plt.gca().add_patch(Polygon(destination_points, linewidth=1,edgecolor='r',faceco
 #     return cv2.warpPerspective(img, M, img_size, flags=cv2.INTER_LINEAR)
 
 
-# In[ ]:
+# In[11]:
 
 
 # 1. Compute the camera calibration matrix and distortion coefficients given a set of chessboard images.
@@ -227,6 +235,7 @@ plt.gca().add_patch(Polygon(destination_points, linewidth=1,edgecolor='r',faceco
 # 3. Use color transforms, gradients, etc., to create a thresholded binary image.
 # IMPLEMENTED BUT NOT FINISHED
 # 4. Apply a perspective transform to rectify binary image ("birds-eye view").
+# DONE
 # 5. Detect lane pixels and fit to find the lane boundary.
 # 6. Determine the curvature of the lane and vehicle position with respect to center.
 # 7. Warp the detected lane boundaries back onto the original image.
@@ -242,7 +251,7 @@ def pipeline(img, calibration, M):
     
 
 
-# In[ ]:
+# In[12]:
 
 
 # Takes the result of the pipeline and visualises it
@@ -250,7 +259,7 @@ def visualisation():
     pass
 
 
-# In[ ]:
+# In[13]:
 
 
 test = test_images[0]
@@ -268,8 +277,16 @@ plt.figure()
 plt.imshow(threshold_binary, cmap='gray')
 plt.title('Threshold')
 
-warped_binary = cv2.warpPerspective(threshold_binary, M, img_size, flags=cv2.INTER_LINEAR)
+warped_binary = cv2.warpPerspective(np.uint8(threshold_binary), M, img_size, flags=cv2.INTER_LINEAR)
 plt.figure()
-plt.imshow(threshold_binary, cmap='gray')
+plt.imshow(warped_binary, cmap='gray')
 plt.title('Warped Threshold')
+
+
+# In[14]:
+
+
+# Useful to remember
+# threshold_binary_2 = threshold_binary[:,:,None]
+# threshold_3 = np.dstack((np.zeros_like(threshold_binary), np.zeros_like(threshold_binary), threshold_binary)) * 255
 
