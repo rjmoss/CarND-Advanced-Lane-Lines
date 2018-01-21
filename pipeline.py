@@ -21,7 +21,7 @@ from IPython.core import debugger
 FRESH = False
 
 
-# In[2]:
+# In[48]:
 
 
 # To save as normal python script (easier to git diff)
@@ -37,6 +37,39 @@ test_images = [cv2.imread(file) for file in test_image_paths]
 # test_images_gray = [cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) for img in test_images]
 
 # pipeline(test_images[0], calibration, M)
+
+
+# In[4]:
+
+
+# prepare object points, like (0,0,0), (1,0,0), (2,0,0) ....,(9,6,0)
+cal_x = 9
+cal_y = 6
+objp = np.zeros((cal_x*cal_y,3), np.float32)
+objp[:,:2] = np.mgrid[0:cal_x, 0:cal_y].T.reshape(-1,2)
+
+
+# In[5]:
+
+
+# prepare object points, like (0,0,0), (1,0,0), (2,0,0) ....,(9,6,0)
+cal_x = 9
+cal_y = 6
+objp = np.zeros((cal_x*cal_y,3), np.float32)
+objp[:,:2] = np.mgrid[0:cal_x, 0:cal_y].T.reshape(-1,2)
+
+# Prepare the object points and image points for the calibration
+calibration_image_paths = glob.glob('camera_cal/calibration*.jpg')
+calibration_images = [cv2.imread(file) for file in calibration_image_paths]
+calibration_images_gray = [cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) for img in calibration_images]
+
+obj_points = []
+img_points = []
+for gray in calibration_images_gray:
+    ret, corners = cv2.findChessboardCorners(gray, (cal_x,cal_y), None)
+    if ret:
+        obj_points.append(objp)
+        img_points.append(corners)
 
 
 # In[6]:
@@ -101,10 +134,11 @@ if FRESH:
     plt.tight_layout()
 
 
-# In[8]:
+# In[183]:
 
 
 # Thresholding functions
+PLOT = True
 
 def abs_sobel_thresh(gray, orient='x', sobel_kernel=3, thresh=(0, 255)):
     if orient == 'x':
@@ -117,6 +151,11 @@ def abs_sobel_thresh(gray, orient='x', sobel_kernel=3, thresh=(0, 255)):
     abs_sobel = np.absolute(sobel)
     scaled = np.uint8(255 * abs_sobel / np.max(abs_sobel))
     grad_binary = ((scaled >= thresh[0]) & (scaled <= thresh[1])).astype(int)
+
+    if PLOT:
+        plt.figure()
+        plt.imshow(grad_binary, cmap='gray')
+        plt.title('Abs Sobel Threshold ' + orient)
     return grad_binary
 
 def mag_thresh(gray, sobel_kernel=3, mag_thresh=(0, 255)):
@@ -127,6 +166,12 @@ def mag_thresh(gray, sobel_kernel=3, mag_thresh=(0, 255)):
     scaled = np.uint8(255 * sobel_xy_abs / np.max(sobel_xy_abs))
 
     mag_binary = ((scaled >= mag_thresh[0]) & (scaled <= mag_thresh[1])).astype(int)
+
+    if PLOT:
+        plt.figure()
+        plt.imshow(mag_binary, cmap='gray')
+        plt.title('Abs Magnitude Threshold')
+
     return mag_binary
 
 def dir_threshold(gray, sobel_kernel=3, thresh=(0, np.pi/2)):
@@ -138,15 +183,34 @@ def dir_threshold(gray, sobel_kernel=3, thresh=(0, np.pi/2)):
     grad = np.arctan2(sobely_abs, sobelx_abs)
 
     dir_binary = ((grad >= thresh[0]) & (grad <= thresh[1]))
+    if PLOT:
+        plt.figure()
+        plt.imshow(dir_binary, cmap='gray')
+        plt.title('Direction Threshold')
     return dir_binary
+
+
+def lightness_select(img, thresh=(0, 255)):
+    hls = cv2.cvtColor(img, cv2.COLOR_RGB2HLS)
+    binary_output = (hls[:,:,1] > thresh[0]) & (hls[:,:,1] <= thresh[1])
+    if PLOT:
+        plt.figure()
+        plt.imshow(binary_output, cmap='gray')
+        plt.title('Lightness Threshold')
+    return binary_output
+
 
 def hls_select(img, thresh=(0, 255)):
     hls = cv2.cvtColor(img, cv2.COLOR_RGB2HLS)
     binary_output = (hls[:,:,2] > thresh[0]) & (hls[:,:,2] <= thresh[1])
+    if PLOT:
+        plt.figure()
+        plt.imshow(binary_output, cmap='gray')
+        plt.title('Saturation Threshold')
     return binary_output
 
 
-# In[9]:
+# In[180]:
 
 
 # Constants for actual use of above functions
@@ -160,10 +224,12 @@ def threshold_combination(img, plot=False):
     gradx = abs_sobel_thresh(gray, orient='x', sobel_kernel=KSIZE, thresh=(20, 100))
     grady = abs_sobel_thresh(gray, orient='y', sobel_kernel=KSIZE, thresh=(20, 100))
     mag_binary = mag_thresh(gray, sobel_kernel=KSIZE, mag_thresh=(30, 100))
-    dir_binary = dir_threshold(gray, sobel_kernel=KSIZE, thresh=(0.7, 1.3))
+    dir_binary = dir_threshold(gray, sobel_kernel=KSIZE, thresh=(-np.pi/8, np.pi/8))
+    saturation_binary = hls_select(img, thresh=(180, 255))
+    lightness_binary = lightness_select(img, thresh=(230, 255))
 
     # combined[((gradx == 1) & (grady == 1)) | ((mag_binary == 1) & (dir_binary == 1))] = 1
-    combined = (gradx & grady | mag_binary & dir_binary)
+    combined = (gradx & grady | mag_binary & dir_binary | saturation_binary) | lightness_binary
     
     if plot:
         f, (ax1, ax2) = plt.subplots(1, 2, figsize=(24, 9))
@@ -178,7 +244,7 @@ def threshold_combination(img, plot=False):
     return combined
 
 
-# In[10]:
+# In[159]:
 
 
 straight = cv2.imread('test_images/straight_lines1.jpg')
@@ -225,18 +291,37 @@ plt.imshow(straight_warped)
 plt.gca().add_patch(Polygon(destination_points, linewidth=1,edgecolor='r',facecolor='none'))
 # def transform_perspective(img, M):
 #     return cv2.warpPerspective(img, M, img_size, flags=cv2.INTER_LINEAR)
+straight_unwarped = cv2.warpPerspective(straight_warped, M_inv, img_size, flags=cv2.INTER_LINEAR)
+plt.figure()
+plt.imshow(straight_unwarped)
 
 
-# In[46]:
+# In[228]:
 
 
 # Windows (2 methods)
 MIN_PIXELS = 50
 
 n_windows = 9
-W_WIDTH = 50
+W_WIDTH = 160
 w_height = 90
-MARGIN = 100
+MARGIN = 160
+
+
+def get_start_points_using_histogram(binary_img):
+    img_height, img_width = binary_img.shape
+
+    histogram = np.sum(binary_img[int(2*img_height/3):, :], axis=0)
+    plt.figure()
+    plt.plot(histogram)
+    plt.title('Histogram')
+    
+    # Get the start points for the windows (e.g. bottom of lane lines)
+    midpoint = int(img_width / 2)
+    left_start = np.argmax(histogram[:midpoint])
+    right_start = midpoint + np.argmax(histogram[midpoint:])
+    return left_start, right_start
+
 
 # Function which finds indices of lane (will call twice e.g. for left/right)
 def find_lane_indices_from_windows(binary_img, start_x, nonzero_x, nonzero_y):
@@ -275,18 +360,11 @@ def find_lane_indices_from_fit(fit, nonzero_x, nonzero_y):
     return lane_inds
 
 
-def get_start_points_using_histogram(binary_img):
-    img_height, img_width = binary_img.shape
-
-    histogram = np.sum(binary_img[int(img_height/2):, :], axis=0)
-    plt.plot(histogram)
-    plt.figure()
-    
-    # Get the start points for the windows (e.g. bottom of lane lines)
-    midpoint = int(img_width / 2)
-    left_start = np.argmax(histogram[:midpoint])
-    right_start = midpoint + np.argmax(histogram[midpoint:])
-    return left_start, right_start
+def get_fit_points(binary_img, left_fit, right_fit):
+    ploty = np.linspace(0, binary_img.shape[0]-1, binary_img.shape[0] )
+    left_fitx = left_fit[0]*ploty**2 + left_fit[1]*ploty + left_fit[2]
+    right_fitx = right_fit[0]*ploty**2 + right_fit[1]*ploty + right_fit[2]
+    return ploty, left_fitx, right_fitx
 
 
 def get_line_fits(binary_img, prev_left_fit=None, prev_right_fit=None):
@@ -328,25 +406,57 @@ def get_line_fits(binary_img, prev_left_fit=None, prev_right_fit=None):
     left_fit = np.polyfit(lefty, leftx, 2)
     right_fit = np.polyfit(righty, rightx, 2)
     
+    ploty, left_fitx, right_fitx = get_fit_points(binary_img, left_fit, right_fit)
     if True:
-        # Generate x and y values for plotting
-        ploty = np.linspace(0, binary_img.shape[0]-1, binary_img.shape[0] )
-        left_fitx = left_fit[0]*ploty**2 + left_fit[1]*ploty + left_fit[2]
-        right_fitx = right_fit[0]*ploty**2 + right_fit[1]*ploty + right_fit[2]
-    
         out_img = np.dstack((binary_img, binary_img, binary_img))*255
-        out_img[nonzero_y[left_lane_inds], nonzero_x[left_lane_inds]] = [255, 0, 0]
-        out_img[nonzero_y[right_lane_inds], nonzero_x[right_lane_inds]] = [0, 0, 255]
+        out_img[nonzero_y[left_lane_inds], nonzero_x[left_lane_inds]] = [255, 0, 0] # red
+        out_img[nonzero_y[right_lane_inds], nonzero_x[right_lane_inds]] = [0, 0, 255] # blue
+        plt.figure()
         plt.imshow(out_img)
         plt.plot(left_fitx, ploty, color='yellow')
         plt.plot(right_fitx, ploty, color='yellow')
         plt.xlim(0, 1280)
         plt.ylim(720, 0)
+        plt.title('Lane Lines')
 
     return left_fit, right_fit
 
 
-# In[12]:
+# In[229]:
+
+
+# Define conversions in x and y from pixels space to meters
+# TODO - check these from the test images
+ym_per_pix = 30/720 # meters per pixel in y dimension
+xm_per_pix = 3.7/700 # meters per pixel in x dimension
+
+def convert_fit_to_metres(fit, mx, my):
+    # Convert the fit from pixels to metres
+    new_fit = (
+        mx / (my**2) * fit[0],
+        mx / my * fit[1],
+        fit[0]
+    )
+    return new_fit
+
+    
+def calculate_curvature(fit, y0):
+    """
+    For f(y) = Ay^2 + By + c
+    R = (1 + (2Ay+B)^2)^(3/2) / abs(2A)
+    """
+    return (1 + (2*fit[0]*y0 + fit[1])**2)**(3/2) / np.abs(2*fit[0])
+
+def get_curvatures(fits):
+    fits_m = [convert_fit_to_metres(fit, xm_per_pix, ym_per_pix) for fit in fits]
+    return [calculate_curvature(fit, test.shape[0]) for fit in fits_m]
+
+def get_offset(y0, fits):
+    lane_line_bases = [fit[0]*y0**2 + fit[1]*y0 + fit[2] for fit in fits]
+    return np.mean(lane_line_bases) * xm_per_pix
+
+
+# In[230]:
 
 
 # 1. Compute the camera calibration matrix and distortion coefficients given a set of chessboard images.
@@ -358,8 +468,11 @@ def get_line_fits(binary_img, prev_left_fit=None, prev_right_fit=None):
 # 4. Apply a perspective transform to rectify binary image ("birds-eye view").
 # DONE
 # 5. Detect lane pixels and fit to find the lane boundary.
+# DONE HISTOGRAM METHOD BUT NOT CONVOLUTION. (and not visualisation, and only for 1 frame)
 # 6. Determine the curvature of the lane and vehicle position with respect to center.
+# DONE CURVATURE BUT NOT POSITION
 # 7. Warp the detected lane boundaries back onto the original image.
+# DONE
 # 8. Output visual display of the lane boundaries and numerical estimation of lane curvature and vehicle position.
 
 def pipeline(img, calibration, M):
@@ -372,7 +485,7 @@ def pipeline(img, calibration, M):
     
 
 
-# In[13]:
+# In[231]:
 
 
 # Takes the result of the pipeline and visualises it
@@ -380,10 +493,29 @@ def visualisation():
     pass
 
 
-# In[14]:
+# In[232]:
 
 
-test = test_images[0]
+def colour_lane(warped_binary, left_fit, right_fit):
+    # Create an image to draw the lines on
+    warp_zero = np.zeros_like(warped_binary).astype(np.uint8)
+    lane_coloured_img = np.dstack((warp_zero, warp_zero, warp_zero))
+    ploty, left_fitx, right_fitx = get_fit_points(warped_binary, left_fit, right_fit)
+
+    # Recast the x and y points into usable format for cv2.fillPoly()
+    pts_left = np.array([np.transpose(np.vstack([left_fitx, ploty]))])
+    pts_right = np.array([np.flipud(np.transpose(np.vstack([right_fitx, ploty])))])
+    pts = np.hstack((pts_left, pts_right)).astype(np.int32)
+
+    # Draw the lane onto the warped blank image
+    cv2.fillPoly(lane_coloured_img, [pts], (0,255, 0))
+    return lane_coloured_img
+
+
+# In[241]:
+
+
+test = test_images[4]
 test = cv2.cvtColor(test, cv2.COLOR_BGR2RGB)
 plt.imshow(test)
 plt.title('Original')
@@ -393,27 +525,56 @@ plt.figure()
 plt.imshow(test_undist)
 plt.title('Undistorted')
 
+
+# In[242]:
+
+
 threshold_binary = threshold_combination(test_undist, False)
 plt.figure()
 plt.imshow(threshold_binary, cmap='gray')
-plt.title('Threshold')
+plt.title('Threshold (combined)')
+
+
+# In[243]:
+
 
 warped_binary = cv2.warpPerspective(np.uint8(threshold_binary), M, img_size, flags=cv2.INTER_LINEAR)
 plt.figure()
 plt.imshow(warped_binary, cmap='gray')
 plt.title('Warped Threshold')
 
+left_fit, right_fit = get_line_fits(warped_binary)
+left_curvature, right_curvature = get_curvatures([left_fit, right_fit])
+offset = get_offset(warped_binary.shape[0], [left_fit, right_fit])
+print('Curvatures (m): ', left_curvature, right_curvature)
+print('Offset (m): ', offset) # Note seems wrong but that's because lane was found incorrectly because thresholds not set yet
 
-# In[15]:
+lane_coloured_img = colour_lane(warped_binary, left_fit, right_fit)
+plt.figure()
+plt.imshow(lane_coloured_img)
+plt.title('Lane filled')
+
+# NOTE - unwarping might be correct, it's just finding the dusty road edge rather than the
+# lane line because I haven't tweaked thresholds yet.
+# Warp the blank back to original image space using inverse perspective matrix (Minv)
+new_warp = cv2.warpPerspective(lane_coloured_img, M_inv, (warped_binary.shape[1], warped_binary.shape[0]), flags=cv2.INTER_LINEAR)
+plt.figure()
+plt.imshow(new_warp)
+plt.title('Lane unwarped')
+
+# Combine the result with the original image
+result = cv2.addWeighted(test_undist, 1, new_warp, 0.3, 0)
+plt.figure()
+plt.imshow(result)
+plt.title('Result - Lane overlayed')
+
+# TODO - add curvature, offset and coloured detected pixels to final image
+
+
+# In[244]:
 
 
 # Useful to remember
 # threshold_binary_2 = threshold_binary[:,:,None]
 # threshold_3 = np.dstack((np.zeros_like(threshold_binary), np.zeros_like(threshold_binary), threshold_binary)) * 255
-
-
-# In[47]:
-
-
-left_fit, right_fit = get_line_fits(warped_binary)
 
