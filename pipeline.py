@@ -1,7 +1,7 @@
 
 # coding: utf-8
 
-# In[1]:
+# In[228]:
 
 
 import cv2
@@ -13,18 +13,20 @@ get_ipython().run_line_magic('matplotlib', 'inline')
 import numpy as np
 import pickle
 
+from collections import deque
 from moviepy.editor import VideoFileClip
 from IPython.display import HTML
 from IPython.core import debugger
 
 
-# In[2]:
+# In[267]:
 
 
 FRESH = False
+SAVE = False
 
 
-# In[ ]:
+# In[145]:
 
 
 # To save as normal python script (easier to git diff)
@@ -37,47 +39,12 @@ get_ipython().system('jupyter nbconvert --to script pipeline.ipynb')
 # TESTING
 test_image_paths = glob.glob('test_images/test*.jpg')
 test_images = [cv2.imread(file) for file in test_image_paths]
-# test_images_gray = [cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) for img in test_images]
-
-# pipeline(test_images[0], calibration, M)
-
-
-# In[4]:
-
-
-# prepare object points, like (0,0,0), (1,0,0), (2,0,0) ....,(9,6,0)
-cal_x = 9
-cal_y = 6
-objp = np.zeros((cal_x*cal_y,3), np.float32)
-objp[:,:2] = np.mgrid[0:cal_x, 0:cal_y].T.reshape(-1,2)
-
-
-# In[5]:
-
-
-# prepare object points, like (0,0,0), (1,0,0), (2,0,0) ....,(9,6,0)
-cal_x = 9
-cal_y = 6
-objp = np.zeros((cal_x*cal_y,3), np.float32)
-objp[:,:2] = np.mgrid[0:cal_x, 0:cal_y].T.reshape(-1,2)
-
-# Prepare the object points and image points for the calibration
-calibration_image_paths = glob.glob('camera_cal/calibration*.jpg')
-calibration_images = [cv2.imread(file) for file in calibration_image_paths]
-calibration_images_gray = [cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) for img in calibration_images]
-
-obj_points = []
-img_points = []
-for gray in calibration_images_gray:
-    ret, corners = cv2.findChessboardCorners(gray, (cal_x,cal_y), None)
-    if ret:
-        obj_points.append(objp)
-        img_points.append(corners)
 
 
 # In[6]:
 
 
+# Camera Calibration
 if FRESH:
     # prepare object points, like (0,0,0), (1,0,0), (2,0,0) ....,(9,6,0)
     cal_x = 9
@@ -120,8 +87,6 @@ else:
 
 if FRESH:
     undistorted_images = [cv2.undistort(img, mtx, dist, None, mtx) for img in calibration_images_gray]
-
-    # Visualize undistortion
     f, axes = plt.subplots(len(calibration_images), 2, figsize=(10,60), sharey=True, sharex=True)
 
     for i, (org, undist) in enumerate(zip(calibration_images_gray, undistorted_images)):
@@ -139,33 +104,6 @@ if FRESH:
 
 # In[91]:
 
-
-def region_of_interest1(img_, vertices_):
-    """
-    Applies an image mask.
-    
-    Only keeps the region of the image defined by the polygon
-    formed from `vertices`. The rest of the image is set to black.
-    """
-    #defining a blank mask to start with
-#     img_like = img[:,:,None]
-    mask = np.zeros_like(img_)
-    
-    #defining a 3 channel or 1 channel color to fill the mask with depending on the input image
-    if len(img.shape) > 2:
-        channel_count = img.shape[2]  # i.e. 3 or 4 depending on your image
-        ignore_mask_color = (255,) * channel_count
-    else:
-        ignore_mask_color = 255
-    
-    # XXX BROKEN WITH SINGLE CHANNEL BINARY IMAGE
-    #filling pixels inside the polygon defined by "vertices" with the fill color    
-    cv2.fillPoly(mask, vertices_, ignore_mask_color)
-    
-    #returning the image only where mask pixels are nonzero
-    masked_image = cv2.bitwise_and(img, mask)
-
-    return masked_image
 
 def region_of_interest(image, vertices):
     ysize = image.shape[0]
@@ -333,7 +271,7 @@ def threshold_combination(img, plot=False):
     return combined
 
 
-# In[110]:
+# In[266]:
 
 
 straight = cv2.imread('test_images/straight_lines1.jpg')
@@ -367,17 +305,26 @@ plt.figure()
 plt.imshow(straight_undist)
 plt.gca().add_patch(Polygon(src_points, linewidth=1,edgecolor='r',facecolor='none'))
 straight_warped = cv2.warpPerspective(straight_undist, M, img_size, flags=cv2.INTER_LINEAR)
+if SAVE:
+    fig = plt.gcf()
+    fig.savefig('output_images/src_points.jpg')
+
 plt.figure()
 plt.imshow(straight_warped)
 plt.gca().add_patch(Polygon(destination_points, linewidth=1,edgecolor='r',facecolor='none'))
-# def transform_perspective(img, M):
-#     return cv2.warpPerspective(img, M, img_size, flags=cv2.INTER_LINEAR)
+if SAVE:
+    fig = plt.gcf()
+    fig.savefig('output_images/dst_points.jpg')
+
 straight_unwarped = cv2.warpPerspective(straight_warped, M_inv, img_size, flags=cv2.INTER_LINEAR)
 plt.figure()
 plt.imshow(straight_unwarped)
+if SAVE:
+    fig = plt.gcf()
+    fig.savefig('output_images/transform_unwarped.jpg')
 
 
-# In[127]:
+# In[257]:
 
 
 # Windows (2 methods)
@@ -393,9 +340,13 @@ def get_start_points_using_histogram(binary_img):
     img_height, img_width = binary_img.shape
 
     histogram = np.sum(binary_img[int(2*img_height/3):, :], axis=0)
-#     plt.figure()
-#     plt.plot(histogram)
-#     plt.title('Histogram')
+    if PLOT:
+        plt.figure()
+        plt.plot(histogram)
+        plt.title('Histogram')
+        if SAVE:
+            fig = plt.gcf()
+            fig.savefig('output_images/histogram'.jpg')
 
     # Get the start points for the windows (e.g. bottom of lane lines)
     midpoint = int(img_width / 2)
@@ -503,11 +454,15 @@ def get_line_fits(binary_img, prev_left_fit=None, prev_right_fit=None):
         plt.xlim(0, 1280)
         plt.ylim(720, 0)
         plt.title('Lane Lines')
+        
+        if SAVE:
+            fig = plt.gcf()
+            fig.savefig('output_images/Lane_Lines.jpg')
 
     return left_fit, right_fit
 
 
-# In[128]:
+# In[258]:
 
 
 # Define conversions in x and y from pixels space to meters
@@ -561,7 +516,7 @@ def sanity_check_fits(left_fit, right_fit):
     return not np.less(MAX_LEFT_RIGHT_DIFF, np.abs(fit_diff)).any()
 
 
-# In[129]:
+# In[259]:
 
 
 def colour_lane(warped_binary, left_fit, right_fit, col=(0,255, 0)):
@@ -580,7 +535,7 @@ def colour_lane(warped_binary, left_fit, right_fit, col=(0,255, 0)):
     return lane_coloured_img
 
 
-# In[130]:
+# In[260]:
 
 
 # Define a class to receive the characteristics of each line detection
@@ -623,7 +578,7 @@ class Frame():
 
 class Clip():
     def __init__(self):
-        self.frames = []
+        self.frames = deque([], maxlen=10)
     
     @property
     def previous_frame(self):
@@ -638,9 +593,22 @@ class Clip():
             prev_left_fit = None
             prev_right_fit = None
         return prev_left_fit, prev_right_fit
+    
+    def calculate_next_fits(self):
+        # Get most recent 5 calculated frames from previous 10 frames
+        left_fits = deque([], maxlen=5)
+        right_fits = deque([], maxlen=5)
+        for f in self.frames:
+            if frame.left_line.detected:
+                left_fits.append(f.left_line.current_fit)
+            if frame.right_line.detected:
+                right_fits.append(f.right_line.current_fit)
+
+        # Calculate the next fit as the average of the previous fits
+        return np.mean(np.asarray(left_fits), axis=0), np.mean(np.asarray(right_fits), axis=0)
 
 
-# In[131]:
+# In[261]:
 
 
 def list_to_sig_figs(arr, n=1):
@@ -652,7 +620,7 @@ def list_to_sig_figs(arr, n=1):
     return rounded
 
 
-# In[132]:
+# In[262]:
 
 
 def add_info_to_image(frame):
@@ -671,7 +639,7 @@ def add_info_to_image(frame):
         cv2.putText(frame.result, line ,(50, 50*(i+1)), font, 1, (255,255,255), 2, cv2.LINE_AA)
 
 
-# In[133]:
+# In[263]:
 
 
 # 1. Compute the camera calibration matrix and distortion coefficients given a set of chessboard images.
@@ -722,15 +690,26 @@ def pipeline(img, calibration, M, clip, plot=False):
     
     lr_match = sanity_check_fits(left_fit, right_fit)
     
+    if lr_match:
+        frame.left_line.detected = True
+        frame.right_line.detected = True
+    else:
+        frame.left_line.detected = False
+        frame.right_line.detected = False
+        left_fit, right_fit = clip.calculate_next_fits()
+
+    frame.left_line.current_fit = left_fit
+    frame.right_line.current_fit = right_fit
+    
     # ---- Get the curvature and the offset from the car to the lane centre ----
     frame.left_line.curvature, frame.right_line.curvature = get_curvatures([left_fit, right_fit])
     frame.offset = get_offset(warped_binary, [left_fit, right_fit])
 
     # ---- Fill in the lane in the warped image---- 
-    if lr_match:
-        lane_coloured_img = colour_lane(warped_binary, left_fit, right_fit, (0, 255, 0))
-    else:
-        lane_coloured_img = colour_lane(warped_binary, left_fit, right_fit, (255, 0, 0))
+#     if lr_match:
+    lane_coloured_img = colour_lane(warped_binary, left_fit, right_fit, (0, 255, 0))
+#     else:
+#         lane_coloured_img = colour_lane(warped_binary, left_fit, right_fit, (255, 0, 0))
 
     # ---- Warp the blank back to original image space using inverse perspective matrix (Minv) ----
     new_warp = cv2.warpPerspective(lane_coloured_img, M_inv, (warped_binary.shape[1], warped_binary.shape[0]), flags=cv2.INTER_LINEAR)
@@ -738,63 +717,49 @@ def pipeline(img, calibration, M, clip, plot=False):
     # ---- Combine the result with the original image ----
     result = cv2.addWeighted(img_undist, 1, new_warp, 0.3, 0)
 
-    # TODO - add curvature, offset and coloured detected pixels to final image
-    # Sanity check fits before 
-    
-    frame.left_line.current_fit = left_fit
-    frame.right_line.current_fit = right_fit
-    frame.result = result
-    
-    
+    # TODO - add coloured detected pixels to final image
+
+    frame.result = result    
     
     # ---- Add information to final image ----
-
     add_info_to_image(frame)
 
     if plot:
-        plt.figure()
-        plt.imshow(img_undist)
-        plt.title('Undistorted')
-        plt.figure()
-        plt.imshow(threshold_binary, cmap='gray')
-        plt.title('Threshold (combined)')
-        plt.figure()
-        plt.imshow(mask, cmap='gray')
-        plt.title('Mask')
-        plt.figure()
-        plt.imshow(img_masked, cmap='gray')
-        plt.title('Masked')
-        plt.figure()
-        plt.imshow(warped_binary, cmap='gray')
-        plt.title('Warped Threshold')
-        plt.figure()
-        plt.imshow(lane_coloured_img)
-        plt.title('Lane filled')
-        plt.figure()
-        plt.imshow(new_warp)
-        plt.title('Lane unwarped')
-        plt.figure()
-        plt.imshow(result)
-        plt.title('Result - Lane overlayed')
-#         for i, line in enumerate(info):
-#             plt.text(50, 50*(i+1), line, color='white', bbox={'facecolor':'black', 'alpha':0.4, 'pad':5})
+        images = [
+            (img, 'Original'),
+            (img_undist, 'Undistorted'),
+            (threshold_binary, 'Threshold (combined)'),
+            (mask, 'Mask'),
+            (img_masked, 'Masked'),
+            (warped_binary, 'Warped Threshold'),
+            (lane_coloured_img, 'Lane filled'),
+            (new_warp, 'Lane unwarped'),
+            (result, 'Result'),
+        ]
 
-        plt.show()
+        for i, title in images:
+            plt.figure()
+            plt.imshow(i, cmap='gray')
+            plt.title(title)
+            if SAVE:
+                fig = plt.gcf()
+                fig.savefig('output_images/' + "_".join(t for t in title.split(" ")) + '.jpg')
 
     return frame
 
 
-# In[ ]:
+# In[264]:
 
 
-PLOT = False
-
-test = test_images[4]
+PLOT = True
+SAVE = True
+test = test_images[1]
 test = cv2.cvtColor(test, cv2.COLOR_BGR2RGB)
 frame = pipeline(test, calibration, M, Clip(), plot=True)
+SAVE = False
 
 
-# In[119]:
+# In[223]:
 
 
 # Useful to remember
@@ -802,7 +767,7 @@ frame = pipeline(test, calibration, M, Clip(), plot=True)
 # threshold_3 = np.dstack((np.zeros_like(threshold_binary), np.zeros_like(threshold_binary), threshold_binary)) * 255
 
 
-# In[135]:
+# In[225]:
 
 
 PLOT = False
@@ -821,10 +786,10 @@ tricky1 = VideoFileClip("project_video.mp4").subclip(21,24)
 tricky2 = VideoFileClip("project_video.mp4").subclip(38,42)
 easy = VideoFileClip("project_video.mp4").subclip(0,2)
 project_video = VideoFileClip("project_video.mp4")
-video = tricky2
+video = project_video
 
 
-# In[136]:
+# In[226]:
 
 
 # video1 = VideoFileClip("challenge_video.mp4").subclip(0,2)
@@ -835,7 +800,7 @@ video_out = video.fl_image(process_image) #NOTE: this function expects color ima
 get_ipython().run_line_magic('time', 'video_out.write_videofile(output_file, audio=False)')
 
 
-# In[140]:
+# In[227]:
 
 
 HTML("""
@@ -845,7 +810,7 @@ HTML("""
 """.format(output_file))
 
 
-# In[24]:
+# In[219]:
 
 
 # Calculate max diffs between lines to use as sanity check
@@ -869,12 +834,14 @@ fit_diffs = np.asarray(fit_diffs)
 max_frame_diffs = np.amax(fit_diffs, 0)
 
 
-# In[143]:
+# In[220]:
 
 
 PLOT = True
 clip2 = Clip()
 # for f in project_video.subclip(41.8, 42).iter_frames():
-for f in project_video.subclip(21.9, 22.2).iter_frames():
+# for f in project_video.subclip(21.9, 22.2).iter_frames():
+for f in tricky1.subclip(2.5, 2.6).iter_frames():
+#     debugger.set_trace()
     frame = pipeline(f, calibration, M, clip2, plot=True)
 
