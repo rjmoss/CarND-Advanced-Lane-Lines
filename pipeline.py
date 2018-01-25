@@ -1,7 +1,7 @@
 
 # coding: utf-8
 
-# In[228]:
+# In[1]:
 
 
 import cv2
@@ -19,21 +19,21 @@ from IPython.display import HTML
 from IPython.core import debugger
 
 
-# In[267]:
+# In[2]:
 
 
 FRESH = False
 SAVE = False
 
 
-# In[145]:
+# In[ ]:
 
 
 # To save as normal python script (easier to git diff)
 get_ipython().system('jupyter nbconvert --to script pipeline.ipynb')
 
 
-# In[3]:
+# In[4]:
 
 
 # TESTING
@@ -41,7 +41,7 @@ test_image_paths = glob.glob('test_images/test*.jpg')
 test_images = [cv2.imread(file) for file in test_image_paths]
 
 
-# In[6]:
+# In[5]:
 
 
 # Camera Calibration
@@ -82,7 +82,7 @@ else:
     calibration = pickle.load(open("camera_cal/pickled_calibration.p", "rb"))
 
 
-# In[7]:
+# In[6]:
 
 
 if FRESH:
@@ -102,7 +102,7 @@ if FRESH:
     plt.tight_layout()
 
 
-# In[91]:
+# In[7]:
 
 
 def region_of_interest(image, vertices):
@@ -111,13 +111,6 @@ def region_of_interest(image, vertices):
     region_select = np.copy(image)
     region_select = np.zeros_like(image)
 
-    # Define a triangle region of interest 
-    # Keep in mind the origin (x=0, y=0) is in the upper left in image processing
-    # Note: if you run this code, you'll find these are not sensible values!!
-    # But you'll get a chance to play with them soon in a quiz 
-#     left_bottom = vertices[0]
-#     right_bottom = vertices[3]
-#     apex = vertices[1]
     imshape = image.shape
     left_bottom = (int(0.1 * imshape[1]), imshape[0])
     left_top = (int(0.45 * imshape[1]), int(0.5 * imshape[0]))
@@ -135,11 +128,9 @@ def region_of_interest(image, vertices):
     XX, YY = np.meshgrid(np.arange(0, xsize), np.arange(0, ysize))
     region_thresholds = (YY > (XX*fit_left[0] + fit_left[1])) &                         (YY > (XX*fit_right[0] + fit_right[1])) &                         (YY < (XX*fit_bottom[0] + fit_bottom[1])) &                         (YY > (XX*fit_top[0] + fit_top[1]))
 
-    # Color pixels red which are inside the region of interest
-#     region_select[region_thresholds] = [255, 0, 0]
     region_select[region_thresholds] = 1
     
-    # Subtact region
+    # Subtract region
     left_bottom = (int(0.2 * imshape[1]), imshape[0])
     left_top = (int(0.48 * imshape[1]), int(0.8 * imshape[0]))
     right_top = (int(0.52 * imshape[1]), int(0.8 * imshape[0]))
@@ -160,7 +151,7 @@ def region_of_interest(image, vertices):
     return region_select
 
 
-# In[92]:
+# In[8]:
 
 
 # Thresholding functions
@@ -236,7 +227,7 @@ def hls_select(img, thresh=(0, 255)):
     return binary_output
 
 
-# In[109]:
+# In[9]:
 
 
 # Constants for actual use of above functions
@@ -271,7 +262,7 @@ def threshold_combination(img, plot=False):
     return combined
 
 
-# In[266]:
+# In[10]:
 
 
 straight = cv2.imread('test_images/straight_lines1.jpg')
@@ -324,7 +315,7 @@ if SAVE:
     fig.savefig('output_images/transform_unwarped.jpg')
 
 
-# In[257]:
+# In[11]:
 
 
 # Windows (2 methods)
@@ -346,7 +337,7 @@ def get_start_points_using_histogram(binary_img):
         plt.title('Histogram')
         if SAVE:
             fig = plt.gcf()
-            fig.savefig('output_images/histogram'.jpg')
+            fig.savefig('output_images/histogram.jpg')
 
     # Get the start points for the windows (e.g. bottom of lane lines)
     midpoint = int(img_width / 2)
@@ -462,7 +453,7 @@ def get_line_fits(binary_img, prev_left_fit=None, prev_right_fit=None):
     return left_fit, right_fit
 
 
-# In[258]:
+# In[12]:
 
 
 # Define conversions in x and y from pixels space to meters
@@ -516,7 +507,7 @@ def sanity_check_fits(left_fit, right_fit):
     return not np.less(MAX_LEFT_RIGHT_DIFF, np.abs(fit_diff)).any()
 
 
-# In[259]:
+# In[13]:
 
 
 def colour_lane(warped_binary, left_fit, right_fit, col=(0,255, 0)):
@@ -535,7 +526,7 @@ def colour_lane(warped_binary, left_fit, right_fit, col=(0,255, 0)):
     return lane_coloured_img
 
 
-# In[260]:
+# In[14]:
 
 
 # Define a class to receive the characteristics of each line detection
@@ -608,7 +599,7 @@ class Clip():
         return np.mean(np.asarray(left_fits), axis=0), np.mean(np.asarray(right_fits), axis=0)
 
 
-# In[261]:
+# In[15]:
 
 
 def list_to_sig_figs(arr, n=1):
@@ -620,7 +611,7 @@ def list_to_sig_figs(arr, n=1):
     return rounded
 
 
-# In[262]:
+# In[16]:
 
 
 def add_info_to_image(frame):
@@ -639,7 +630,7 @@ def add_info_to_image(frame):
         cv2.putText(frame.result, line ,(50, 50*(i+1)), font, 1, (255,255,255), 2, cv2.LINE_AA)
 
 
-# In[263]:
+# In[17]:
 
 
 # 1. Compute the camera calibration matrix and distortion coefficients given a set of chessboard images.
@@ -748,7 +739,7 @@ def pipeline(img, calibration, M, clip, plot=False):
     return frame
 
 
-# In[264]:
+# In[18]:
 
 
 PLOT = True
@@ -759,7 +750,7 @@ frame = pipeline(test, calibration, M, Clip(), plot=True)
 SAVE = False
 
 
-# In[223]:
+# In[19]:
 
 
 # Useful to remember
@@ -767,7 +758,7 @@ SAVE = False
 # threshold_3 = np.dstack((np.zeros_like(threshold_binary), np.zeros_like(threshold_binary), threshold_binary)) * 255
 
 
-# In[225]:
+# In[20]:
 
 
 PLOT = False
@@ -779,7 +770,6 @@ def process_image(img):
 
 # Videos
 output_file = 'output_images/video_out.mp4'
-video1_output = 'output_images/challenge_video_out.mp4'
 video2_output = 'output_images/harder_challenge_video_out.mp4'
 
 tricky1 = VideoFileClip("project_video.mp4").subclip(21,24)
@@ -789,18 +779,14 @@ project_video = VideoFileClip("project_video.mp4")
 video = project_video
 
 
-# In[226]:
+# In[21]:
 
-
-# video1 = VideoFileClip("challenge_video.mp4").subclip(0,2)
-# video1 = VideoFileClip("challenge_video.mp4")
-# video2 = VideoFileClip("harder_challenge_video.mp4")
 
 video_out = video.fl_image(process_image) #NOTE: this function expects color images!!
 get_ipython().run_line_magic('time', 'video_out.write_videofile(output_file, audio=False)')
 
 
-# In[227]:
+# In[22]:
 
 
 HTML("""
@@ -810,7 +796,7 @@ HTML("""
 """.format(output_file))
 
 
-# In[219]:
+# In[23]:
 
 
 # Calculate max diffs between lines to use as sanity check
@@ -834,14 +820,28 @@ fit_diffs = np.asarray(fit_diffs)
 max_frame_diffs = np.amax(fit_diffs, 0)
 
 
-# In[220]:
+# In[ ]:
 
 
-PLOT = True
-clip2 = Clip()
-# for f in project_video.subclip(41.8, 42).iter_frames():
-# for f in project_video.subclip(21.9, 22.2).iter_frames():
-for f in tricky1.subclip(2.5, 2.6).iter_frames():
-#     debugger.set_trace()
-    frame = pipeline(f, calibration, M, clip2, plot=True)
+video1 = VideoFileClip("challenge_video.mp4")
+video_out = video1.fl_image(process_image) #NOTE: this function expects color images!!
+get_ipython().run_line_magic('time', "video_out.write_videofile('output_images/challenge_video_out.mp4', audio=False)")
+HTML("""
+<video width="960" height="540" controls>
+  <source src="{0}">
+</video>
+""".format('output_images/challenge_video_out.mp4'))
+
+
+# In[ ]:
+
+
+video2 = VideoFileClip("harder_challenge_video.mp4")
+video_out = video1.fl_image(process_image) #NOTE: this function expects color images!!
+get_ipython().run_line_magic('time', "video_out.write_videofile('output_images/harder_challenge_video_out.mp4', audio=False)")
+HTML("""
+<video width="960" height="540" controls>
+  <source src="{0}">
+</video>
+""".format('output_images/harder_challenge_video_out.mp4'))
 

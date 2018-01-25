@@ -24,6 +24,7 @@ The goals / steps of this project are the following:
 [image4]: ./output_images/Undistorted.jpg "Undistorted"
 [image5]: ./output_images/Threshold_(combined).jpg "Threshold"
 [image6]: ./output_images/Mask.jpg "Mask"
+[image6b]: ./output_images/Masked.jpg "Masked"
 [image7]: ./output_images/Warped_Threshold.jpg "Warped Threshold"
 [image8]: ./output_images/Lane_Lines.jpg "Lane Lines"
 [image9]: ./output_images/Lane_filled.jpg "Lane Filled"
@@ -52,7 +53,7 @@ The code is all in a python notebook called `pipeline.ipynb` which was used for 
 You're reading it...
 
 ### Camera Calibration
-The camera is calibrated at the start of the python notebook or in lines XXX to XXX of `pipeline.py`.
+The camera is calibrated at the start of the python notebook or in lines 47 to 82 of `pipeline.py`.
 
 I start by preparing "object points", which will be the (x, y, z) coordinates of the chessboard corners in the world. Here I am assuming the chessboard is fixed on the (x, y) plane at z=0, such that the object points are the same for each calibration image.  Thus, `objp` is just a replicated array of coordinates, and `objpoints` will be appended with a copy of it every time I successfully detect all chessboard corners in a test image.  `imgpoints` will be appended with the (x, y) pixel position of each of the corners in the image plane with each successful chessboard detection.  
 
@@ -77,7 +78,7 @@ The distortion is applied to the original image (see below). The change can be s
 
 #### 2. Thresholded binary
 
-Through a mixture of trial and error and careful tweaking I settled on a combination of an x-gradient threshold, lightness threshold and saturation threshold. The code can be seen in the `threshold_combination` function (line XXX of `pipeline.py` but is in summary:
+Through a mixture of trial and error and careful tweaking I settled on a combination of an x-gradient threshold, lightness threshold and saturation threshold. The code can be seen in the `threshold_combination` function (line 238 of `pipeline.py` but is in summary:
 ```
 gradx = abs_sobel_thresh(gray, orient='x', sobel_kernel=KSIZE, thresh=(20, 100))
 saturation_binary = hls_select(img, thresh=(180, 255))
@@ -97,11 +98,11 @@ In addition to the thresholding I also applied a mask to remove the parts of the
 ![alt text][image6]
 
 *Masked binary image*
-![alt text][image7]
+![alt text][image6b]
 
 #### 3. Perspective transform
 
-For the perspective transform I manually chose then hardcoded the following source and destination points. The transform 
+For the perspective transform I manually chose then hardcoded the following source and destination points:
 
 ```python
 src_points = np.float32([
@@ -129,32 +130,32 @@ img_warped = cv2.warpPerspective(img, M, img_size, flags=cv2.INTER_LINEAR)
 
 I verified that my perspective transform was working as expected by drawing the `src` and `dst` points onto a test image and its warped counterpart to verify that the lines appear parallel in the warped image.
 
-*Source points*
 ![alt text][image12]
-
-*Destination points*
 ![alt text][image13]
 
-*Warped then unwarped*
+Warped then unwarped
+
 ![alt text][image14]
 
-#### 4. Lane line pixel finding and fitting
-Having got a warped binary image, the lane lines are found in 2 steps (see function `get_line_fits`):
-    1. Base of the line is found using a histogram 
-    2. Line is found using moving window method
-
-For example returning to our warped binary image example from before:
+The warping is applied to the binary image to give:
 
 *Masked binary image*
 ![alt text][image7]
 
-*Histogram of bottom 1/3*
-![alt text][image15]
+#### 4. Lane line pixel finding and fitting
+Having got a warped binary image, the lane lines are found in 2 steps (see function `get_line_fits`):
 
-*Lane lines*
+1. Base of the line is found using a histogram of the bottom third of the image and finding the peaks to the left/right of centre
+2. Line is found using moving window method
+
+![alt text][image15]
 ![alt text][image8]
 
 The lines were sanity checked by checking that the difference between the fit coefficients of the left and right lines did not exceded some maximum values. These maximum values were determined manually (with the starting point being the max diffs found in the subclips of the video where the lines were judged to be correct - in fact the full video pipeline was built before choosing these values, with lanes deemed to be "correct" outputed in green and "wrong" ones in red which enabled a quick feedback loop when tweaking these parameters).
+
+The lanes were filled using `cv2.fillPoly()` before being unwarped ready to overlay onto the original image.
+![alt text][image9]
+![alt text][image10]
 
 #### 5. Radius of curvature and offset
 The radius of curvature is calculated at the base of the lane lines (e.g. the bottom of the image):
@@ -179,33 +180,30 @@ def get_offset(img, fits):
 #### 6. Final image
 Here is the final image, which consists of the original image undistorted and overlayed with the filled in lane and information about the curvature, offset and line fits.
 
-![alt text][image6]
+![alt text][image11]
 
 ---
 
 ### Pipeline (video)
 
 #### 1. Video result
+For the video ran each frame through the pipeline `using video.fl_image()` and kept track of the fits between frames using some custom classes: Clip, Frame, and Line. Where Line kept the left/right line points and fits, Frame kept the left/right Lines and the curvature/offset of the lane for that image and Clip kept the last 10 Frames of the video in a deque.
 
-XXX Quick discussion of changes made for video
+Clip has a method called `calculate_next_fits` which averages the last 5 found fits from the last 10 frames. This is used when the lane line has not been found with a high degree of confidence.
 
-I tested using the margin from the previous fit line to find the lane line pixels but found that the original method of histogram + sliding windows gave better results (at least for my setup). However intuitively going off the previous fit feels like it ought to be a more robust method so perhaps a future improvement would be to dive deeper into this.
+I tested using fit line from the previous frame (+/- margin) to find the lane line pixels but found that the original method of histogram + sliding windows gave better results (at least for my setup). However intuitively going off the previous fit feels like it ought to be a more robust method so perhaps a future improvement would be to dive deeper into this.
 
-Here's a [link to my video result](./project_video.mp4)
+Here's a [link to my video result](./output_images/video_result.mp4)
 
 ---
 
 ### Discussion
 
-Difficulties - mask for binary image, tweaking thresholds etc...
+One challenge during this project was the parameter choice for the thresholds and how to combine the results of the various thresholding methods. This is a crucial step for isolating lane line pixels however is somewhat manual (compared to ML at least) and values which work well on some images might not on others so when changing the values a wide array of situations should be re-tested which can be time consuming.
 
-Challenge video
-Harder challenge video
+As can be seen when testing on the challenge videos the pipeline is not particularly robust, and is thrown off by unusual lighting conditions or marks on the road. Possible improvements or areas to investigate include:
 
-Weaknesses/where it might fail
-Possible improvements/next steps
-    Smoothing
-    Convolution
-    Better colour thresholds (perhaps hue specific for white/yellow)
-    More time on gradient thresholds
-    Sanity check could use change of fit from frame to frame (as well as between left/right lines)
+* Smoothing - the average of previous fits is used when a lane line cannot be found, but even when it it found using an average with previous lanes (perhaps a weighted average) could lead to a smoother result as there is slight wobble in the current video.
+* Colour thresholds - the threshold values could be tested/tweaked more carefully. Also perhaps a hue threshold could also be added to the combination as the lane lines are always yellow or white so a hue + saturation threshold could pick out the yellow, and a high lightness threshold could get the white.
+* Gradient thresholds - I'm currently using just the x gradient threshold but careful application of the directional gradient threshold might lead to better results.
+* Currently the sanity check for the lane lines compares the left and right line fits within the same frame. This seems to work reasonably well however a more advanced sanity check would, in addition, compare the new fits to fits in the previous frame as the curvature should not change dramatically from frame to frame.
