@@ -57,12 +57,9 @@ The camera is calibrated at the start of the python notebook or in lines 47 to 8
 
 I start by preparing "object points", which will be the (x, y, z) coordinates of the chessboard corners in the world. Here I am assuming the chessboard is fixed on the (x, y) plane at z=0, such that the object points are the same for each calibration image.  Thus, `objp` is just a replicated array of coordinates, and `objpoints` will be appended with a copy of it every time I successfully detect all chessboard corners in a test image.  `imgpoints` will be appended with the (x, y) pixel position of each of the corners in the image plane with each successful chessboard detection.  
 
-I then used the output `objpoints` and `imgpoints` to compute the camera calibration and distortion coefficients using the `cv2.calibrateCamera()` function.  I applied this distortion correction to the test image using the `cv2.undistort()` function and obtained this result: 
+I then used the output `objpoints` and `imgpoints` to compute the camera calibration and distortion coefficients using the `cv2.calibrateCamera()` function.  Here's an example of the distortion correction applied to the original chessboard image using the `cv2.undistort()` function:
 
-*Original Chessboard*
 ![alt text][image1]
-
-*Undistorted Chessboard*
 ![alt text][image2]
 
 Note that the camera only needs to be calibrated once so the the resulting calibration is pickled into `camera_cal/pickled_calibration.p`.
@@ -94,10 +91,7 @@ Applied to the test image above the lane lines have been isolated fairly well (t
 
 In addition to the thresholding I also applied a mask to remove the parts of the image which we are not interested to remove distractions which could cause issues later in the pipeline. The following mask was applied to create a masked, thresholded binary:
 
-*Mask*
 ![alt text][image6]
-
-*Masked binary image*
 ![alt text][image6b]
 
 #### 3. Perspective transform
@@ -139,14 +133,13 @@ Warped then unwarped
 
 The warping is applied to the binary image to give:
 
-*Masked binary image*
 ![alt text][image7]
 
 #### 4. Lane line pixel finding and fitting
 Having got a warped binary image, the lane lines are found in 2 steps (see function `get_line_fits`):
 
 1. Base of the line is found using a histogram of the bottom third of the image and finding the peaks to the left/right of centre
-2. Line is found using moving window method
+2. Line is found using moving window method (see lines `350` to `375`)
 
 ![alt text][image15]
 ![alt text][image8]
